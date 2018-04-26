@@ -17,18 +17,18 @@ const ipfs = ipfsAPI({host: 'localhost', port: '5001', protocol: 'http'});
 window.App = {
   start: function() {
     var self = this;
+     
+    Store_Contract.setProvider(web3.currentProvider);
+    renderStore();
+
     var reader;
 
-      
-  Store_Contract.setProvider(web3.currentProvider);
-  renderStore();
-
- 
     $("#product-image").change(function(event) {
     const file = event.target.files[0]
     reader = new window.FileReader()
     reader.readAsArrayBuffer(file)
     });
+
 
    $("#add-item-to-store").submit(function(event) {
       const req = $("#add-item-to-store").serialize();
@@ -75,7 +75,7 @@ window.App = {
    event.preventDefault();
   });
 
-      $("#revealing").submit(function(event) {
+  $("#revealing").submit(function(event) {
    $("#msg").hide();
    let amount = $("#actual-amount").val();
    let secretText = $("#reveal-secret-text").val();
@@ -121,18 +121,31 @@ window.App = {
     });
   }
 
+
+
+function renderStore() {
+  Store_Contract.deployed().then(function(i) {
+  i.getProduct.call(1).then(function(p) {
+  $("#product-list").append(buildProduct(p));
+});
+  i.getProduct.call(2).then(function(p) {
+  $("#product-list").append(buildProduct(p));
+  });
+ });
+}
+
 function saveImageOnIpfs(reader) {
- return new Promise(function(resolve, reject) {
-  const buffer = Buffer.from(reader.result);
-  ipfs.add(buffer)
-  .then((response) => {
+  return new Promise(function(resolve, reject) {
+   const buffer = Buffer.from(reader.result);
+   ipfs.add(buffer)
+   .then((response) => {
    console.log(response)
    resolve(response[0].hash);
   }).catch((err) => {
-   console.error(err)
-   reject(err);
+    console.error(err)
+    reject(err);
+    })
   })
- })
 }
 
 function saveTextBlobOnIpfs(blob) {
@@ -149,16 +162,16 @@ function saveTextBlobOnIpfs(blob) {
  })
 }
 
-
-function renderStore() {
-  Store_Contract.deployed().then(function(i) {
-  i.getProduct.call(1).then(function(p) {
-  $("#product-list").append(buildProduct(p));
-});
-  i.getProduct.call(2).then(function(p) {
-  $("#product-list").append(buildProduct(p));
-  });
- });
+function buildProduct(product) {
+ let node = $("<div/>");
+ node.addClass("col-sm-3 text-center col-margin-bottom-1");
+ node.append("<img src='https://ipfs.io/ipfs/" + product[3] + "' width='150px' />");
+ node.append("<div>" + product[1]+ "</div>");
+ node.append("<div>" + product[2]+ "</div>");
+ node.append("<div>" + product[5]+ "</div>");
+ node.append("<div>" + product[6]+ "</div>");
+ node.append("<div>Ether " + product[7] + "</div>");
+ return node;
 }
 
 function renderProductDetails(productId) {
@@ -224,17 +237,7 @@ function displayEndHours(seconds) {
  }
 }
 
-function buildProduct(product) {
- let node = $("<div/>");
- node.addClass("col-sm-3 text-center col-margin-bottom-1");
- node.append("<img src='https://ipfs.io/ipfs/" + product[3] + "' width='150px' />");
- node.append("<div>" + product[1]+ "</div>");
- node.append("<div>" + product[2]+ "</div>");
- node.append("<div>" + product[5]+ "</div>");
- node.append("<div>" + product[6]+ "</div>");
- node.append("<div>Ether " + product[7] + "</div>");
- return node;
-}
+
 
 window.addEventListener('load', function() {
  // Checking if Web3 has been injected by the browser (Mist/MetaMask)
