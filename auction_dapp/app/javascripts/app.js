@@ -91,6 +91,56 @@ window.App = {
    });
    event.preventDefault();
   });
+
+  $("#finalize-auction").submit(function(event) {
+  $("#msg").hide();
+  let productId = $("#product-id").val();
+  Store_Contract.deployed().then(function(i) {
+  i.finalizeAuction(parseInt(productId), {from: web3.eth.accounts[0], gas: 4400000}).then(
+   function(f) {
+   $("#msg").show();
+   $("#msg").html("The auction has been finalized and winner declared.");
+   console.log(f)
+   location.reload();
+   }
+  ).catch(function(e) {
+   console.log(e);
+   $("#msg").show();
+   $("#msg").html("The auction can not be finalized by the buyer or seller, only a third party aribiter can finalize it");
+  })
+  });
+  event.preventDefault();
+});
+
+  
+  $("#release-funds").click(function() {
+   let productId = new URLSearchParams(window.location.search).get('id');
+   Store_Contract.deployed().then(function(f) {
+    $("#msg").html("Your transaction has been submitted. Please wait for few seconds for the confirmation").show();
+    console.log(productId);
+    f.releaseAmountToSeller(productId, {from: web3.eth.accounts[0], gas: 440000}).then(function(f) {
+     console.log(f);
+     location.reload();
+    }).catch(function(e) {
+     console.log(e);
+    })
+   });
+  });
+
+  $("#refund-funds").click(function() {
+   let productId = new URLSearchParams(window.location.search).get('id');
+   Store_Contract.deployed().then(function(f) {
+    $("#msg").html("Your transaction has been submitted. Please wait for few seconds for the confirmation").show();
+    f.refundAmountToBuyer(productId, {from: web3.eth.accounts[0], gas: 440000}).then(function(f) {
+     console.log(f);
+     location.reload();
+    }).catch(function(e) {
+     console.log(e);
+    })
+   });
+
+   alert("refund the funds!");
+  });
     
     },
   };
@@ -176,29 +226,61 @@ function buildProduct(product) {
 
 function renderProductDetails(productId) {
  Store_Contract.deployed().then(function(i) {
-  i.getProduct.call(productId).then(function(p) {
-   console.log(p);
-   let content = "";
-   ipfs.cat(p[4]).then(function(file) {
-    content = file.toString();
-    $("#product-desc").append("<div>" + content+ "</div>");
-   });
+ i.getProduct.call(productId).then(function(p) {
+  console.log(p);
+  let content = "";
+  ipfs.cat(p[4]).then(function(file) {
+  //stream.on('data', function(chunk) {
+  // do stuff with this chunk of data
+  content += file.toString();
+  $("#product-desc").append("<div>" + content+ "</div>");
+  //})
+  });
 
-   $("#product-image").append("<img src='https://ipfs.io/ipfs/" + p[3] + "' width='250px' />");
-   $("#product-price").html(displayPrice(p[7]));
-   $("#product-name").html(p[1].name);
-   $("#product-auction-end").html(displayEndHours(p[6]));
-   $("#product-id").val(p[0]);
-   $("#revealing, #bidding").hide();
-   let currentTime = getCurrentTimeInSeconds();
-   if(currentTime < p[6]) {
-    $("#bidding").show();
-   } else if (currentTime - (60) < p[6]) {
-    $("#revealing").show();
-   }
-  })
+  $("#product-image").append("<img src='https://ipfs.io/ipfs/" + p[3] + "' width='250px' />");
+  $("#product-price").html(displayPrice(p[7]));
+  $("#product-name").html(p[1].name);
+  $("#product-auction-end").html(displayEndHours(p[6]));
+  $("#product-id").val(p[0]);
+  $("#revealing, #bidding, #finalize-auction, #escrow-info").hide();
+  let currentTime = getCurrentTimeInSeconds();
+   if (parseInt(p[8]) == 1) {
+   Store_Contract.deployed().then(function(i) {
+    $("#escrow-info").show();
+    i.highestBidderInfo.call(productId).then(function(f) {
+     if (f[2].toLocaleString() == '0') {
+      $("#product-status").html("Auction has ended. No bids were revealed");
+     } else {
+      $("#product-status").html("Auction has ended. Product sold to " + f[0] + " for " + displayPrice(f[2]) +
+       "The money is in the escrow. Two of the three participants (Buyer, Seller and Arbiter) have to " +
+       "either release the funds to seller or refund the money to the buyer");
+     }
+    })
+    i.escrowInfo.call(productId).then(function(f) {
+     $("#buyer").html('Buyer: ' + f[0]);
+     $("#seller").html('Seller: ' + f[1]);
+     $("#arbiter").html('Arbiter: ' + f[2]);
+     if(f[3] == true) {
+      $("#release-count").html("Amount from the escrow has been released");
+     } else {
+      $("#release-count").html(f[4] + " of 3 participants have agreed to release funds");
+      $("#refund-count").html(f[5] + " of 3 participants have agreed to refund the buyer");
+     }
+    })
+   })
+  } else if(parseInt(p[8]) == 2) {
+  $("#product-status").html("Product was not sold");
+  } else if(currentTime < parseInt(p[6])) {
+  $("#bidding").show();
+  } else if (currentTime < (parseInt(p[6]) + 200)) {
+  $("#revealing").show();
+  } else {
+  $("#finalize-auction").show();
+  }
+ })
  })
 }
+
 
 function getCurrentTimeInSeconds(){
  return Math.round(new Date() / 1000);

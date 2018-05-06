@@ -1,4 +1,5 @@
 pragma solidity ^0.4.17;
+import "contracts/Escrow.sol";
 
 contract Store_Contract {
  enum ProductStatus { Open, Sold, Unsold }
@@ -7,6 +8,7 @@ contract Store_Contract {
  uint public productIndex;
  mapping (address => mapping(uint => Product)) stores;
  mapping (uint => address) productIdInStore;
+ mapping (uint => address) productEscrow;
 
  struct Product {
   uint id;
@@ -38,6 +40,7 @@ contract Store_Contract {
  function EcommerceStore() public {
   productIndex = 0;
  }
+ 
  function addProductToStore(string _name, string _category, string _imageLink, string _descLink, uint _auctionStartTime,
   uint _auctionEndTime, uint _startPrice, uint _productCondition) public {
   require (_auctionStartTime < _auctionEndTime);
@@ -117,6 +120,7 @@ function highestBidderInfo(uint _productId) view public returns (address, uint, 
   return (product.highestBidder, product.highestBid, product.secondHighestBid);
 }
 
+
 function totalBids(uint _productId) view public returns (uint) {
   Product memory product = stores[productIdInStore[_productId]][_productId];
   return product.totalBids;
@@ -133,5 +137,45 @@ function stringToUint(string s) pure private returns (uint) {
   return result;
 }
 
+
+function finalizeAuction(uint _productId) public {
+ Product memory product = stores[productIdInStore[_productId]][_productId];
+ // 48 hours to reveal the bid
+ require(now > product.auctionEndTime);
+ require(product.status == ProductStatus.Open);
+ require(product.highestBidder != msg.sender);
+ require(productIdInStore[_productId] != msg.sender);
+
+ if (product.totalBids == 0) {
+  product.status = ProductStatus.Unsold;
+ } else {
+  // Whoever finalizes the auction is the arbiter
+  Escrow escrow = (new Escrow).value(product.secondHighestBid)(_productId, product.highestBidder, productIdInStore[_productId], msg.sender);
+  productEscrow[_productId] = address(escrow);
+  product.status = ProductStatus.Sold;
+  // The bidder only pays the amount equivalent to second highest bidder
+  // Refund the difference
+  uint refund = product.highestBid - product.secondHighestBid;
+  product.highestBidder.transfer(refund);
+ }
+  stores[productIdInStore[_productId]][_productId] = product;
+
+ }
+
+ function escrowAddressForProduct(uint _productId) view public returns (address) {
+ return productEscrow[_productId];
+ }
+
+ function escrowInfo(uint _productId) view public returns (address, address, address, bool, uint, uint) {
+ return Escrow(productEscrow[_productId]).escrowInfo();
+}
+
+function releaseAmountToSeller(uint _productId) public {
+  Escrow(productEscrow[_productId]).releaseAmountToSeller(msg.sender);
+}
+
+function refundAmountToBuyer(uint _productId) public {
+  Escrow(productEscrow[_productId]).refundAmountToBuyer(msg.sender);
+}
 
 }
